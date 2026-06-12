@@ -24,7 +24,12 @@ let app = express();
 
 let appServer: Server;
 
-export function runServer(port = 3000, buildMode = false) {
+let toolSearchName: string | undefined;
+let toolSearchDescription: string | undefined;
+
+export function runServer(port = 3000, buildMode = false, _toolSearchName?: string, _toolSearchDescription?: string) {
+  toolSearchName = _toolSearchName;
+  toolSearchDescription = _toolSearchDescription;
   console.log(
     styleText(
       "blue",
@@ -41,7 +46,7 @@ export function runServer(port = 3000, buildMode = false) {
     version: "1.0.0",
   });
 
-  toolSearchVitePressDocs(mcpServer, buildMode);
+  toolSearchVitePressDocs(mcpServer, buildMode, toolSearchName, toolSearchDescription);
   promptBasic(mcpServer);
 
   // NOTE:Handle POST requests for client-to-server communication
