@@ -220,6 +220,13 @@ const initializeStreamableTransport = async () => {
  */
 const initializeMCPServer = async (transport: StreamableHTTPServerTransport | SSEServerTransport, res: express.Response) => {
   try {
+    // Close any existing transport before connecting a new one
+    // (MCP SDK only allows one active connection per server)
+    try {
+      await mcpServer.close();
+    } catch {
+      // Server may not be connected yet; that's fine
+    }
     // Connect to the MCP server
     await mcpServer.connect(transport);
   } catch (error) {
