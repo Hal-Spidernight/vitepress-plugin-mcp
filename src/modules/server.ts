@@ -49,6 +49,11 @@ export function runServer(port = 3000, buildMode = false, _toolSearchName?: stri
   toolSearchVitePressDocs(mcpServer, buildMode, toolSearchName, toolSearchDescription);
   promptBasic(mcpServer);
 
+  app.get("/mcp", (req, res) => {
+    console.log("GET request received at /mcp - this endpoint is reserved for Agent communication. Responding with 403 Forbidden.");
+    res.status(403).send("Use Agent can access this endpoint.");
+  });
+
   // NOTE:Handle POST requests for client-to-server communication
   app.post("/mcp", async (req, res) => {
     console.log("POST request received at /mcp");
