@@ -49,9 +49,9 @@ export function runServer(port = 3000, buildMode = false, _toolSearchName?: stri
   toolSearchVitePressDocs(mcpServer, buildMode, toolSearchName, toolSearchDescription);
   promptBasic(mcpServer);
 
-  app.get("/mcp", (req, res) => {
-    console.log("GET request received at /mcp - this endpoint is reserved for Agent communication. Responding with 403 Forbidden.");
-    res.status(403).send("Use Agent can access this endpoint.");
+  app.get("/mcp", async (req, res) => {
+    console.log("GET request received at /mcp");
+    await callStreamableServer(req, res);
   });
 
   // NOTE:Handle POST requests for client-to-server communication
@@ -60,10 +60,11 @@ export function runServer(port = 3000, buildMode = false, _toolSearchName?: stri
     await callStreamableServer(req, res);
   });
 
-  // // Handle GET requests for Streamable HTTP sessions
-  // app.get("/mcp", async (req, res) => {
-  //   await callStreamableServer(req, res);
-  // });
+  // Handle DELETE requests for session termination (StreamableHTTP)
+  app.delete("/mcp", async (req, res) => {
+    console.log("DELETE request received at /mcp");
+    await callStreamableServer(req, res);
+  });
 
   // Handle GET requests for server-to-client notifications via SSE
   app.get("/mcp/__sse", handleSSESessionRequest);
@@ -116,7 +117,7 @@ const callStreamableServer = async (req: express.Request, res: express.Response)
     if (sessionId && transports.streamable[sessionId]) {
       // Reuse existing transport
       transport = transports.streamable[sessionId];
-    } else if (!sessionId && isInitializeRequest(req.body)) {
+    } else if (!sessionId && req.body && isInitializeRequest(req.body)) {
       console.log("Initializing new transport");
       transport = await initializeStreamableTransport();
 
@@ -259,7 +260,7 @@ async function initializeServers() {
       }
     }
     for (const sessionId in transports.sse) {
-      const transport = transports.streamable[sessionId];
+      const transport = transports.sse[sessionId];
       if (transport) {
         await transport.close();
         console.log(`Transport closed for session ID: ${sessionId}`);
