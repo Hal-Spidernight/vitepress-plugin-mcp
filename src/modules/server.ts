@@ -49,9 +49,14 @@ export function runServer(port = 3000, buildMode = false, _toolSearchName?: stri
   toolSearchVitePressDocs(mcpServer, buildMode, toolSearchName, toolSearchDescription);
   promptBasic(mcpServer);
 
+  // GET /mcp: SSE streaming (with session ID) or server metadata (without session ID)
   app.get("/mcp", async (req, res) => {
-    console.log("GET request received at /mcp");
-    await callStreamableServer(req, res);
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !transports.streamable[sessionId]) {
+       res.status(403).send("Use Agent can access this endpoint.");
+    } else {
+      await callStreamableServer(req, res);
+    }
   });
 
   // NOTE:Handle POST requests for client-to-server communication
