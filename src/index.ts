@@ -7,11 +7,15 @@ import { runServer, restartServer } from "./modules/server";
 export type MCPPluginOptions = {
   port: number;
   specPath?: string; // OpenAPI specification path
+  serverName?: string; // MCP server name for discovery
+  serverVersion?: string; // MCP server version for discovery
+  toolSearchName?: string; // Name of the search tool
+  toolSearchDescription?: string; // Description of the search tool
 };
 
 let serverBootFlg = false;
 
-export function MCPPlugin(inlineOptions?: Partial<MCPPluginOptions>): Plugin {
+function MCPPlugin(inlineOptions?: Partial<MCPPluginOptions>): Plugin {
   return {
     name: "vitepress-plugin-mcp",
     enforce: "post",
@@ -62,7 +66,8 @@ export function MCPPlugin(inlineOptions?: Partial<MCPPluginOptions>): Plugin {
           return;
         }
 
-        runServer(inlineOptions?.port);
+        const { port, specPath, ...serverOpts } = inlineOptions ?? {};
+        runServer(port, false, serverOpts);
       }, 1500);
     },
     configurePreviewServer(server) {
@@ -76,4 +81,10 @@ export function MCPPlugin(inlineOptions?: Partial<MCPPluginOptions>): Plugin {
       }
     },
   } satisfies Plugin;
+}
+
+export {
+  MCPPlugin,
+  runServer,
+  restartServer,
 }

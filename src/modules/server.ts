@@ -15,16 +15,36 @@ const transports = {
   streamable: {} as Record<string, StreamableHTTPServerTransport>,
   sse: {} as Record<string, SSEServerTransport>,
 };
+
+export interface MCPServerOptions {
+  /** Server metadata shown in GET /mcp discovery response */
+  serverName: string;
+  serverVersion: string;
+  /** Search tool configuration */
+  toolSearchName: string;
+  toolSearchDescription: string;
+}
+
+let serverOptions: MCPServerOptions = {
+  serverName: "VitePress-server",
+  serverVersion: "1.0.0",
+  toolSearchName: "search_vitepress_docs",
+  toolSearchDescription:
+    "Search VitePress Documents For This Product. Extract up to five keywords each English and native language, and define all of them as single words. e.g. Vitepress, API, Specification,Extensions etc.",
+};
+
 let mcpServer = new McpServer({
-  name: "VitePress-server",
-  version: "1.0.0",
+  name: serverOptions.serverName,
+  version: serverOptions.serverVersion,
 });
 
 let app = express();
 
 let appServer: Server;
 
-export function runServer(port = 3000, buildMode = false) {
+export function runServer(port = 3000, buildMode = false, options: Partial<MCPServerOptions> = {}) {
+  serverOptions = Object.assign(serverOptions, options);
+
   console.log(
     styleText(
       "blue",
@@ -37,12 +57,35 @@ export function runServer(port = 3000, buildMode = false) {
   app.use(express.json());
 
   mcpServer = new McpServer({
-    name: "VitePress-server",
-    version: "1.0.0",
+    name: serverOptions.serverName,
+    version: serverOptions.serverVersion,
   });
 
-  toolSearchVitePressDocs(mcpServer, buildMode);
+  toolSearchVitePressDocs(mcpServer, buildMode, serverOptions.toolSearchName, serverOptions.toolSearchDescription);
   promptBasic(mcpServer);
+
+  // GET /mcp: SSE streaming (with session ID) or server discovery (without session ID)
+  app.get("/mcp", async (req, res) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (sessionId && transports.streamable[sessionId]) {
+      // Valid session: delegate to transport for SSE streaming
+      await callStreamableServer(req, res);
+    } else {
+      // No session: return server metadata JSON (discovery / health check)
+      res.json({
+        server: {
+          name: serverOptions.serverName,
+          version: serverOptions.serverVersion,
+          transport: "http",
+        },
+        capabilities: {
+          tools: serverOptions.toolSearchName
+            ? { name: serverOptions.toolSearchName, description: serverOptions.toolSearchDescription }
+            : {},
+        },
+      });
+    }
+  });
 
   // NOTE:Handle POST requests for client-to-server communication
   app.post("/mcp", async (req, res) => {
@@ -50,10 +93,11 @@ export function runServer(port = 3000, buildMode = false) {
     await callStreamableServer(req, res);
   });
 
-  // // Handle GET requests for Streamable HTTP sessions
-  // app.get("/mcp", async (req, res) => {
-  //   await callStreamableServer(req, res);
-  // });
+  // Handle DELETE requests for session termination (StreamableHTTP)
+  app.delete("/mcp", async (req, res) => {
+    console.log("DELETE request received at /mcp");
+    await callStreamableServer(req, res);
+  });
 
   // Handle GET requests for server-to-client notifications via SSE
   app.get("/mcp/__sse", handleSSESessionRequest);
@@ -80,8 +124,7 @@ export function runServer(port = 3000, buildMode = false) {
     if ((errorMessage ?? "").includes("address already in use")) {
       console.error("Error starting server:", error?.message);
       console.warn("Port", port, "is already in use. Retrying with next port...");
-      port++;
-      runServer(port);
+      runServer(port + 1, buildMode, serverOptions);
       return;
     }
     console.log(styleText("whiteBright", `VitePress Plugin MCP`));
@@ -106,7 +149,7 @@ const callStreamableServer = async (req: express.Request, res: express.Response)
     if (sessionId && transports.streamable[sessionId]) {
       // Reuse existing transport
       transport = transports.streamable[sessionId];
-    } else if (!sessionId && isInitializeRequest(req.body)) {
+    } else if (!sessionId && req.body && isInitializeRequest(req.body)) {
       console.log("Initializing new transport");
       transport = await initializeStreamableTransport();
 
@@ -215,6 +258,13 @@ const initializeStreamableTransport = async () => {
  */
 const initializeMCPServer = async (transport: StreamableHTTPServerTransport | SSEServerTransport, res: express.Response) => {
   try {
+    // Close any existing transport before connecting a new one
+    // (MCP SDK only allows one active connection per server)
+    try {
+      await mcpServer.close();
+    } catch {
+      // Server may not be connected yet; that's fine
+    }
     // Connect to the MCP server
     await mcpServer.connect(transport);
   } catch (error) {
@@ -242,7 +292,7 @@ async function initializeServers() {
       }
     }
     for (const sessionId in transports.sse) {
-      const transport = transports.streamable[sessionId];
+      const transport = transports.sse[sessionId];
       if (transport) {
         await transport.close();
         console.log(`Transport closed for session ID: ${sessionId}`);
