@@ -2,10 +2,10 @@ import { z } from "zod";
 import { searchByMiniSearch } from "../modules/search/miniSearch";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-export function toolSearchVitePressDocs(mcp: McpServer, buildMode = false, toolSearchName?: string, toolSearchDescription?: string) {
+export function toolSearchVitePressDocs(mcp: McpServer, buildMode = false, toolSearchName: string, toolSearchDescription: string) {
   mcp.tool(
-    toolSearchName || "search_vitepress_docs",
-    toolSearchDescription || "Search VitePress Documents For This Product. Extract up to five keywords each English and native language, and define all of them as single words. e.g. Vitepress, API, Specification,Extensions etc.",
+    toolSearchName,
+    toolSearchDescription,
     { keywords: z.array(z.string()) },
     async ({ keywords }) => {
       console.log("START: search-docs");

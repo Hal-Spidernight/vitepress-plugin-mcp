@@ -7,6 +7,8 @@ import { runServer, restartServer } from "./modules/server";
 export type MCPPluginOptions = {
   port: number;
   specPath?: string; // OpenAPI specification path
+  serverName?: string; // MCP server name for discovery
+  serverVersion?: string; // MCP server version for discovery
   toolSearchName?: string; // Name of the search tool
   toolSearchDescription?: string; // Description of the search tool
 };
@@ -64,7 +66,8 @@ function MCPPlugin(inlineOptions?: Partial<MCPPluginOptions>): Plugin {
           return;
         }
 
-        runServer(inlineOptions?.port, false, inlineOptions?.toolSearchName, inlineOptions?.toolSearchDescription);
+        const { port, specPath, ...serverOpts } = inlineOptions ?? {};
+        runServer(port, false, serverOpts);
       }, 1500);
     },
     configurePreviewServer(server) {

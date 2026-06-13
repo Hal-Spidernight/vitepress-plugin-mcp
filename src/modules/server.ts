@@ -15,21 +15,36 @@ const transports = {
   streamable: {} as Record<string, StreamableHTTPServerTransport>,
   sse: {} as Record<string, SSEServerTransport>,
 };
+
+export interface MCPServerOptions {
+  /** Server metadata shown in GET /mcp discovery response */
+  serverName: string;
+  serverVersion: string;
+  /** Search tool configuration */
+  toolSearchName: string;
+  toolSearchDescription: string;
+}
+
+let serverOptions: MCPServerOptions = {
+  serverName: "VitePress-server",
+  serverVersion: "1.0.0",
+  toolSearchName: "search_vitepress_docs",
+  toolSearchDescription:
+    "Search VitePress Documents For This Product. Extract up to five keywords each English and native language, and define all of them as single words. e.g. Vitepress, API, Specification,Extensions etc.",
+};
+
 let mcpServer = new McpServer({
-  name: "VitePress-server",
-  version: "1.0.0",
+  name: serverOptions.serverName,
+  version: serverOptions.serverVersion,
 });
 
 let app = express();
 
 let appServer: Server;
 
-let toolSearchName: string | undefined;
-let toolSearchDescription: string | undefined;
+export function runServer(port = 3000, buildMode = false, options: Partial<MCPServerOptions> = {}) {
+  serverOptions = Object.assign(serverOptions, options);
 
-export function runServer(port = 3000, buildMode = false, _toolSearchName?: string, _toolSearchDescription?: string) {
-  toolSearchName = _toolSearchName;
-  toolSearchDescription = _toolSearchDescription;
   console.log(
     styleText(
       "blue",
@@ -42,20 +57,33 @@ export function runServer(port = 3000, buildMode = false, _toolSearchName?: stri
   app.use(express.json());
 
   mcpServer = new McpServer({
-    name: "VitePress-server",
-    version: "1.0.0",
+    name: serverOptions.serverName,
+    version: serverOptions.serverVersion,
   });
 
-  toolSearchVitePressDocs(mcpServer, buildMode, toolSearchName, toolSearchDescription);
+  toolSearchVitePressDocs(mcpServer, buildMode, serverOptions.toolSearchName, serverOptions.toolSearchDescription);
   promptBasic(mcpServer);
 
-  // GET /mcp: SSE streaming (with session ID) or server metadata (without session ID)
+  // GET /mcp: SSE streaming (with session ID) or server discovery (without session ID)
   app.get("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (!sessionId || !transports.streamable[sessionId]) {
-       res.status(403).send("Use Agent can access this endpoint.");
-    } else {
+    if (sessionId && transports.streamable[sessionId]) {
+      // Valid session: delegate to transport for SSE streaming
       await callStreamableServer(req, res);
+    } else {
+      // No session: return server metadata JSON (discovery / health check)
+      res.json({
+        server: {
+          name: serverOptions.serverName,
+          version: serverOptions.serverVersion,
+          transport: "http",
+        },
+        capabilities: {
+          tools: serverOptions.toolSearchName
+            ? { name: serverOptions.toolSearchName, description: serverOptions.toolSearchDescription }
+            : {},
+        },
+      });
     }
   });
 
@@ -96,8 +124,7 @@ export function runServer(port = 3000, buildMode = false, _toolSearchName?: stri
     if ((errorMessage ?? "").includes("address already in use")) {
       console.error("Error starting server:", error?.message);
       console.warn("Port", port, "is already in use. Retrying with next port...");
-      port++;
-      runServer(port);
+      runServer(port + 1, buildMode, serverOptions);
       return;
     }
     console.log(styleText("whiteBright", `VitePress Plugin MCP`));
